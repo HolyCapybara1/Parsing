@@ -1,0 +1,39 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.Python
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Виртуальные окружения
+venv/
+.venv/
+env/
+.env
+
+# База данных
+data/*.db
+data/*.db-shm
+data/*.db-wal
+
+# Резервные копии
+backups/*.db
+
+# Логи
+logs/*.log
+
+# ML-модели (большие файлы)
+ml/models/*.pkl
+
+# Streamlit
+.streamlit/secrets.toml
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
