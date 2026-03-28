@@ -35,25 +35,64 @@ class BaseParser:
         def _run():
             import asyncio
             import sys
-            # Фикс для Windows: ProactorEventLoop поддерживает subprocess
+            import random
             if sys.platform == "win32":
                 asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
 
             try:
                 from playwright.sync_api import sync_playwright
                 with sync_playwright() as p:
-                    browser = p.chromium.launch(headless=True, args=["--no-sandbox"])
+                    browser = p.chromium.launch(
+                        headless=True,
+                        args=[
+                            "--no-sandbox",
+                            "--disable-blink-features=AutomationControlled",
+                            "--disable-infobars",
+                            "--disable-dev-shm-usage",
+                        ],
+                    )
                     ctx = browser.new_context(
                         user_agent=user_agent,
                         locale="ru-RU",
+                        timezone_id="Europe/Moscow",
                         viewport={"width": 1280, "height": 800},
+                        java_script_enabled=True,
+                        # Передаём реальные параметры браузера
+                        extra_http_headers={
+                            "Accept-Language": "ru-RU,ru;q=0.9,en-US;q=0.8",
+                            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+                            "Accept-Encoding": "gzip, deflate, br",
+                            "Upgrade-Insecure-Requests": "1",
+                            "Sec-Fetch-Dest": "document",
+                            "Sec-Fetch-Mode": "navigate",
+                            "Sec-Fetch-Site": "none",
+                            "Sec-Fetch-User": "?1",
+                        },
                     )
                     page = ctx.new_page()
-                    page.set_extra_http_headers({
-                        "Accept-Language": "ru-RU,ru;q=0.9",
-                        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-                    })
-                    page.goto(url, wait_until="domcontentloaded", timeout=30000)
+
+                    # Скрываем признаки автоматизации через JS
+                    page.add_init_script("""
+                        Object.defineProperty(navigator, 'webdriver', {get: () => undefined});
+                        Object.defineProperty(navigator, 'plugins', {get: () => [1,2,3,4,5]});
+                        Object.defineProperty(navigator, 'languages', {get: () => ['ru-RU','ru','en-US','en']});
+                        window.chrome = {runtime: {}};
+                    """)
+
+                    # Применяем playwright-stealth если установлен
+                    try:
+                        from playwright_stealth import stealth_sync
+                        stealth_sync(page)
+                        logger.info("Stealth-режим активирован")
+                    except ImportError:
+                        logger.warning("playwright-stealth не установлен, работаем без него")
+
+                    page.goto(url, wait_until="networkidle", timeout=40000)
+
+                    # Имитируем поведение человека
+                    time.sleep(random.uniform(1.5, 3.0))
+                    page.mouse.move(random.randint(200, 800), random.randint(200, 500))
+                    time.sleep(random.uniform(0.5, 1.5))
 
                     if wait_selector:
                         try:
@@ -61,8 +100,10 @@ class BaseParser:
                         except Exception:
                             logger.warning(f"Селектор '{wait_selector}' не найден на {url}")
 
-                    page.evaluate("window.scrollTo(0, document.body.scrollHeight / 2)")
-                    time.sleep(1.5)
+                    page.evaluate("window.scrollTo(0, document.body.scrollHeight / 3)")
+                    time.sleep(random.uniform(1.0, 2.0))
+                    page.evaluate("window.scrollTo(0, document.body.scrollHeight * 2 / 3)")
+                    time.sleep(random.uniform(0.8, 1.5))
                     page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
                     time.sleep(1.0)
 
