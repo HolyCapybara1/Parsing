@@ -1,7 +1,81 @@
 """
-Диагностический скрипт — сохраняет HTML и скриншот страницы DNS.
+Диагностический скрипт — проверяет что возвращает сайт.
 Запуск: python debug_dns.py
 """
+import sys, os, threading, time
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+os.makedirs("debug_output", exist_ok=True)
+
+TEST_URL = "https://www.regard.ru/catalog/1010/operativnaya-pamyat"
+
+def run():
+    if sys.platform == "win32":
+        import asyncio
+        asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
+
+    result = {}
+
+    def _thread():
+        import asyncio as _asyncio
+        if sys.platform == "win32":
+            _asyncio.set_event_loop_policy(_asyncio.WindowsProactorEventLoopPolicy())
+        try:
+            from playwright.sync_api import sync_playwright
+            with sync_playwright() as p:
+                browser = p.chromium.launch(headless=True, args=["--no-sandbox", "--disable-blink-features=AutomationControlled"])
+                ctx = browser.new_context(
+                    user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+                    locale="ru-RU", viewport={"width": 1280, "height": 800},
+                )
+                page = ctx.new_page()
+                page.add_init_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
+                page.goto(TEST_URL, wait_until="networkidle", timeout=40000)
+                time.sleep(3)
+                html = page.content()
+                with open("debug_output/regard_page.html", "w", encoding="utf-8") as f:
+                    f.write(html)
+                page.screenshot(path="debug_output/regard_screenshot.png")
+                result["title"] = page.title()
+                result["size"] = len(html)
+                browser.close()
+        except Exception as e:
+            result["error"] = str(e)
+
+    t = threading.Thread(target=_thread)
+    t.start()
+    t.join(timeout=60)
+
+    if "error" in result:
+        print(f"Ошибка: {result['error']}")
+        return
+
+    print(f"Заголовок: {result.get('title')}")
+    print(f"Размер HTML: {result.get('size', 0)} символов")
+    print(f"Скриншот: debug_output/regard_screenshot.png")
+
+    from bs4 import BeautifulSoup
+    with open("debug_output/regard_page.html", encoding="utf-8") as f:
+        soup = BeautifulSoup(f.read(), "html.parser")
+
+    classes = set()
+    for tag in soup.find_all(True, limit=500):
+        for cls in tag.get("class", []):
+            for kw in ["product", "catalog", "card", "item", "price", "name", "good"]:
+                if kw in cls.lower():
+                    classes.add(cls)
+
+    if classes:
+        print("\nКлассы на странице:")
+        for c in sorted(classes):
+            print(f"  .{c}")
+    else:
+        body = soup.find("body")
+        print("\nКлассы не найдены. Содержимое страницы:")
+        print(body.get_text()[:600] if body else "(пусто)")
+
+if __name__ == "__main__":
+    run()
+
 import sys
 import os
 import asyncio
