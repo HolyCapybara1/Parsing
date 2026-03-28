@@ -11,7 +11,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 os.makedirs("debug_output", exist_ok=True)
 
 # URL страницы с реальными товарами (не категории, а листинг)
-TEST_URL = "https://www.regard.ru/catalog/1010/operativnaya-pamyat/?sort=price"
+TEST_URL = "https://www.nix.ru/price/ozu-pamyat-ddr5/"
 
 
 def _playwright_thread(result: dict):
@@ -60,10 +60,10 @@ def _playwright_thread(result: dict):
             result["title"] = page.title()
             result["html"] = html
 
-            with open("debug_output/regard_page.html", "w", encoding="utf-8") as f:
+            with open("debug_output/nix_page.html", "w", encoding="utf-8") as f:
                 f.write(html)
 
-            page.screenshot(path="debug_output/regard_screenshot.png", full_page=False)
+            page.screenshot(path="debug_output/nix_screenshot.png", full_page=False)
 
         except Exception as e:
             result["error"] = str(e)
@@ -84,7 +84,7 @@ def run():
     html = result.get("html", "")
     print(f"Заголовок: {result.get('title', 'N/A')}")
     print(f"Размер HTML: {len(html)} символов")
-    print(f"Скриншот сохранён: debug_output/regard_screenshot.png")
+    print(f"Скриншот сохранён: debug_output/nix_screenshot.png")
 
     if not html:
         print("HTML пустой!")
