@@ -111,11 +111,35 @@ def run():
         text = body.get_text()[:800] if body else ""
         print(f"\nКлассы не найдены. Текст страницы:\n{text}")
 
-    # Показываем первые ссылки на товары
+    # Показываем структуру карточки товара
     product_links = soup.select("a[href*='/product/'], a[href*='/good/'], a[href*='/tovar/']")
     if product_links:
         print(f"\nНайдено ссылок на товары: {len(product_links)}")
-        print(f"Пример: {product_links[0].get('href', '')}")
+        link = product_links[0]
+        print(f"Пример ссылки: {link.get('href', '')}")
+        print(f"Текст ссылки: {link.get_text(strip=True)[:80]}")
+
+        # Поднимаемся вверх по дереву и показываем классы родителей
+        print("\nЦепочка родительских классов (снизу вверх):")
+        node = link
+        for i in range(8):
+            node = node.parent
+            if node is None or node.name in ["html", "body", "[document]"]:
+                break
+            classes = node.get("class", [])
+            print(f"  {i+1}. <{node.name}> классы: {classes}")
+
+        # Ищем цену рядом с первой ссылкой (в родительском блоке)
+        card = link
+        for _ in range(6):
+            card = card.parent
+            if card is None:
+                break
+            price_el = card.select_one("[class*='price'], [class*='Price'], [class*='cost'], [class*='Cost']")
+            if price_el:
+                print(f"\nЦена найдена: '{price_el.get_text(strip=True)[:50]}'")
+                print(f"Класс цены: {price_el.get('class', [])}")
+                break
 
 
 if __name__ == "__main__":
