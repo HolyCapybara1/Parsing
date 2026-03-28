@@ -129,17 +129,15 @@ def run():
             classes = node.get("class", [])
             print(f"  {i+1}. <{node.name}> классы: {classes}")
 
-        # Ищем цену рядом с первой ссылкой (в родительском блоке)
-        card = link
-        for _ in range(6):
-            card = card.parent
-            if card is None:
-                break
-            price_el = card.select_one("[class*='price'], [class*='Price'], [class*='cost'], [class*='Cost']")
-            if price_el:
-                print(f"\nЦена найдена: '{price_el.get_text(strip=True)[:50]}'")
-                print(f"Класс цены: {price_el.get('class', [])}")
-                break
+        # Показываем всё содержимое карточки
+        card = soup.select_one("[class*='ListingRenderer_listingCard']")
+        if card:
+            print("\n--- Все классы внутри карточки ---")
+            for tag in card.find_all(True):
+                cls = tag.get("class", [])
+                text = tag.get_text(strip=True)[:60]
+                if cls:
+                    print(f"  <{tag.name}> {cls} → '{text}'")
 
 
 if __name__ == "__main__":
