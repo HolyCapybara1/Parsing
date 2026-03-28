@@ -1,9 +1,14 @@
 from .base import BaseParser
 
+# Реальные URL категорий Ситилинк
 CATEGORIES = {
-    "Оперативная память": "/category/moduli-pamyati/",
-    "Видеокарты": "/category/videokarty/",
-    "Смартфоны": "/category/smartfony/",
+    "Оперативная память": "/catalog/moduli-pamyati/",
+    "Видеокарты": "/catalog/videokarty/",
+    "Смартфоны": "/catalog/smartfony/",
+    "Процессоры": "/catalog/processory/",
+    "Ноутбуки": "/catalog/noutbuki/",
+    "SSD-накопители": "/catalog/ssd-nakopiteli/",
+    "Наушники": "/catalog/naushniki/",
 }
 
 
@@ -12,64 +17,94 @@ class CitilinkParser(BaseParser):
         super().__init__("Ситилинк", "https://www.citilink.ru")
 
     def parse_category(self, category: str) -> list[dict]:
-        path = CATEGORIES.get(category, "")
+        path = CATEGORIES.get(category)
         if not path:
+            self.logger.warning(f"Ситилинк: категория '{category}' не найдена")
             return []
 
-        products, page = [], 1
-        while True:
-            url = f"{self.base_url}{path}?p={page}"
-            soup = self.get_page(url)
+        products = []
+        for page_num in range(1, 6):
+            url = f"{self.base_url}{path}?p={page_num}"
+            self.logger.info(f"Ситилинк {category}: страница {page_num}")
+
+            soup = self.get_page(url, wait_selector="[class*='ProductCard']")
             if not soup:
                 break
 
-            items = soup.select(".product-card")
+            # Ситилинк использует React — ищем по data-атрибутам и стабильным структурам
+            items = (
+                soup.select("[data-meta-product]") or
+                soup.select("article[class*='ProductCard']") or
+                soup.select("[class*='ProductCard_root']")
+            )
             if not items:
-                items = soup.select("[data-meta-product]")
-            if not items:
+                self.logger.info(f"Ситилинк {category}: стр.{page_num} пустая, стоп")
                 break
 
             for item in items:
                 try:
-                    name_tag = item.select_one(".product-card__title") or \
-                               item.select_one("[class*='title']")
-                    price_tag = item.select_one(".product-card__price_current") or \
-                                item.select_one("[class*='price']")
-                    rating_tag = item.select_one(".rating__value") or \
-                                 item.select_one("[class*='rating']")
-                    reviews_tag = item.select_one(".product-card__reviews-count") or \
-                                  item.select_one("[class*='reviews']")
-                    link_tag = item.select_one("a[href]")
+                    # Название
+                    name_tag = (
+                        item.select_one("[class*='ProductCard_title']") or
+                        item.select_one("[class*='_title']") or
+                        item.select_one("a[class*='title']") or
+                        item.select_one("h3") or
+                        item.select_one("h2")
+                    )
+                    if not name_tag:
+                        continue
+                    name = name_tag.get_text(strip=True)
+                    if not name:
+                        continue
 
-                    name = name_tag.text.strip() if name_tag else ""
-                    price_str = price_tag.text.strip() if price_tag else "0"
-                    price = float("".join(filter(str.isdigit, price_str)) or 0)
-                    rating_text = rating_tag.text.strip() if rating_tag else "0"
-                    rating = float("".join(c for c in rating_text if c.isdigit() or c == ".") or 0)
-                    reviews_text = reviews_tag.text.strip() if reviews_tag else "0"
-                    reviews = int("".join(filter(str.isdigit, reviews_text)) or 0)
+                    # Ссылка
+                    link_tag = item.select_one("a[href*='/product/']") or item.select_one("a[href]")
+                    href = link_tag.get("href", "") if link_tag else ""
+                    item_url = self.base_url + href if href.startswith("/") else href
+
+                    # Цена — ищем числа в элементах с price в классе
+                    price_tag = (
+                        item.select_one("[class*='price__current']") or
+                        item.select_one("[class*='ProductCard_price']") or
+                        item.select_one("[class*='Price_price']") or
+                        item.select_one("[class*='price']")
+                    )
+                    price = self.clean_price(price_tag.get_text() if price_tag else "")
+                    if price <= 0:
+                        continue
+
+                    # Рейтинг
+                    rating_tag = (
+                        item.select_one("[class*='Rating_']") or
+                        item.select_one("[class*='rating']")
+                    )
+                    rating = self.clean_rating(rating_tag.get("aria-label", "") or
+                                               (rating_tag.get_text() if rating_tag else ""))
+
+                    # Отзывы
+                    reviews_tag = item.select_one("[class*='review']") or item.select_one("[class*='Review']")
+                    reviews = self.clean_reviews(reviews_tag.get_text() if reviews_tag else "")
+
                     brand = name.split()[0] if name else ""
-                    item_url = link_tag["href"] if link_tag else ""
-                    if item_url and not item_url.startswith("http"):
-                        item_url = self.base_url + item_url
 
-                    if name and price > 0:
-                        products.append({
-                            "name": name,
-                            "brand": brand,
-                            "category": category,
-                            "price": price,
-                            "rating": rating,
-                            "reviews_count": reviews,
-                            "url": item_url,
-                            "source": "Ситилинк",
-                        })
+                    products.append({
+                        "name": name,
+                        "brand": brand,
+                        "category": category,
+                        "price": price,
+                        "rating": rating,
+                        "reviews_count": reviews,
+                        "url": item_url,
+                        "source": "Ситилинк",
+                    })
                 except Exception as e:
-                    self.logger.error(f"Ошибка парсинга товара Ситилинк: {e}")
+                    self.logger.error(f"Ситилинк: ошибка обработки товара: {e}")
 
-            page += 1
-            if page > 5:
+            self.logger.info(f"Ситилинк {category}: стр.{page_num} — {len(items)} карточек")
+
+            next_btn = soup.select_one("a[rel='next']") or soup.select_one("[class*='pagination'][class*='next']")
+            if not next_btn:
                 break
 
-        self.logger.info(f"Ситилинк {category}: собрано {len(products)} товаров")
+        self.logger.info(f"Ситилинк {category}: итого {len(products)} товаров")
         return products
