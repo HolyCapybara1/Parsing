@@ -76,9 +76,24 @@ class RegardParser(BaseParser):
                     )
                     reviews = self.clean_reviews(reviews_tag.get_text() if reviews_tag else "")
 
-                    # Бренд — второе слово (первое обычно "Оперативная", "Видеокарта" и т.д.)
-                    words = name.split()
-                    brand = words[2] if len(words) > 2 else (words[0] if words else "")
+                    # Бренд — ищем известные бренды в названии
+                    BRANDS = [
+                        "Kingston", "Samsung", "Crucial", "Corsair", "HyperX",
+                        "G.Skill", "Patriot", "ADATA", "Team", "Hynix", "Micron",
+                        "NVIDIA", "AMD", "Palit", "Gigabyte", "ASUS", "MSI", "Sapphire",
+                        "PowerColor", "XFX", "Zotac", "Apple", "Xiaomi", "Realme",
+                        "Intel", "Lenovo", "HP", "Dell", "Acer", "Huawei", "Honor",
+                        "Western Digital", "Seagate", "Transcend", "Silicon Power",
+                        "Sennheiser", "Sony", "JBL", "Jabra", "HyperX",
+                    ]
+                    brand = ""
+                    name_lower = name.lower()
+                    for b in BRANDS:
+                        if b.lower() in name_lower:
+                            brand = b
+                            break
+                    if not brand:
+                        brand = name.split()[0] if name else ""
 
                     products.append({
                         "name": name,
