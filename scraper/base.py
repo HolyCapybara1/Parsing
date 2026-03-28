@@ -19,50 +19,72 @@ class BaseParser:
         self.logger = logging.getLogger(source_name)
 
     def get_page(self, url: str, wait_selector: str = None) -> BeautifulSoup | None:
-        """Загрузить страницу через Playwright (рендерит JS)."""
+        """Загрузить страницу через Playwright в отдельном потоке (обход проблем asyncio на Windows)."""
         try:
-            from playwright.sync_api import sync_playwright
+            import playwright  # noqa: F401
         except ImportError:
-            self.logger.error("Playwright не установлен. Выполните: pip install playwright && playwright install chromium")
+            self.logger.error("Playwright не установлен. Выполните: python -m pip install playwright && python -m playwright install chromium")
             return None
 
-        try:
-            with sync_playwright() as p:
-                browser = p.chromium.launch(headless=True, args=["--no-sandbox"])
-                ctx = browser.new_context(
-                    user_agent=self.USER_AGENT,
-                    locale="ru-RU",
-                    viewport={"width": 1280, "height": 800},
-                )
-                page = ctx.new_page()
-                page.set_extra_http_headers({
-                    "Accept-Language": "ru-RU,ru;q=0.9",
-                    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-                })
+        result = [None]
+        exc = [None]
+        user_agent = self.USER_AGENT
+        delay = self.DELAY
+        logger = self.logger
 
-                page.goto(url, wait_until="domcontentloaded", timeout=30000)
+        def _run():
+            import asyncio
+            import sys
+            # Фикс для Windows: ProactorEventLoop поддерживает subprocess
+            if sys.platform == "win32":
+                asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
 
-                if wait_selector:
-                    try:
-                        page.wait_for_selector(wait_selector, timeout=12000)
-                    except Exception:
-                        self.logger.warning(f"Селектор '{wait_selector}' не найден на {url}")
+            try:
+                from playwright.sync_api import sync_playwright
+                with sync_playwright() as p:
+                    browser = p.chromium.launch(headless=True, args=["--no-sandbox"])
+                    ctx = browser.new_context(
+                        user_agent=user_agent,
+                        locale="ru-RU",
+                        viewport={"width": 1280, "height": 800},
+                    )
+                    page = ctx.new_page()
+                    page.set_extra_http_headers({
+                        "Accept-Language": "ru-RU,ru;q=0.9",
+                        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+                    })
+                    page.goto(url, wait_until="domcontentloaded", timeout=30000)
 
-                # Прокрутка для ленивой загрузки
-                page.evaluate("window.scrollTo(0, document.body.scrollHeight / 2)")
-                time.sleep(1.5)
-                page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
-                time.sleep(1.0)
+                    if wait_selector:
+                        try:
+                            page.wait_for_selector(wait_selector, timeout=12000)
+                        except Exception:
+                            logger.warning(f"Селектор '{wait_selector}' не найден на {url}")
 
-                content = page.content()
-                browser.close()
+                    page.evaluate("window.scrollTo(0, document.body.scrollHeight / 2)")
+                    time.sleep(1.5)
+                    page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+                    time.sleep(1.0)
 
-            time.sleep(self.DELAY)
-            return BeautifulSoup(content, "html.parser")
+                    result[0] = page.content()
+                    browser.close()
+            except Exception as e:
+                exc[0] = e
 
-        except Exception as e:
-            self.logger.error(f"Ошибка загрузки {url}: {e}")
+        import threading
+        t = threading.Thread(target=_run, daemon=True)
+        t.start()
+        t.join(timeout=60)
+
+        if exc[0]:
+            self.logger.error(f"Ошибка загрузки {url}: {exc[0]}")
             return None
+        if not result[0]:
+            self.logger.error(f"Пустой ответ от {url}")
+            return None
+
+        time.sleep(delay)
+        return BeautifulSoup(result[0], "html.parser")
 
     def parse_category(self, category: str) -> list[dict]:
         raise NotImplementedError
