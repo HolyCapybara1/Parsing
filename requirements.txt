@@ -1,0 +1,23 @@
+# Парсинг
+requests>=2.31
+beautifulsoup4>=4.12
+lxml>=4.9
+playwright>=1.44
+
+# База данных
+sqlalchemy>=2.0
+
+# Обработка данных
+pandas>=2.1
+numpy>=1.26
+
+# ML
+scikit-learn>=1.4
+lightgbm>=4.0
+joblib>=1.3
+
+# Дашборд
+streamlit>=1.32
+plotly>=5.18
+altair>=5.2
+openpyxl>=3.1
