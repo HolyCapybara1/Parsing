@@ -21,3 +21,5 @@ streamlit>=1.32
 plotly>=5.18
 altair>=5.2
 openpyxl>=3.1
+kaleido>=0.2.1
+fpdf2>=2.7
