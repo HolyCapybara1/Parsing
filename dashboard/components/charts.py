@@ -277,6 +277,175 @@ def min_max_by_category(df: pd.DataFrame):
     return fig
 
 
+# ── Аналитика расширенная ──────────────────────────────────────────────────
+
+def market_share_chart(pos_df: pd.DataFrame):
+    """Доля рынка: pie (по кол-ву товаров) + bar (средняя цена)."""
+    fig = make_subplots(
+        rows=1, cols=2,
+        specs=[[{"type": "pie"}, {"type": "bar"}]],
+        subplot_titles=("Доля по числу товаров", "Средняя цена (₽)"),
+    )
+    colors = [STORE_COLORS.get(s, "#888") for s in pos_df["Магазин"]]
+    fig.add_trace(go.Pie(
+        labels=pos_df["Магазин"],
+        values=pos_df["Товаров"],
+        marker_colors=colors,
+        textinfo="label+percent",
+        name="Доля рынка",
+    ), row=1, col=1)
+    fig.add_trace(go.Bar(
+        x=pos_df["Магазин"],
+        y=pos_df["Средняя_цена"],
+        marker_color=colors,
+        text=pos_df["Средняя_цена"].round(0),
+        texttemplate="%{text:,.0f} ₽",
+        textposition="outside",
+        name="Средняя цена",
+    ), row=1, col=2)
+    fig.update_layout(title="Позиция магазинов на рынке", showlegend=False, height=400)
+    return fig
+
+
+def demand_structure_chart(demand_df: pd.DataFrame):
+    """Структура спроса по категориям — treemap."""
+    fig = px.treemap(
+        demand_df,
+        path=["Категория"],
+        values="Всего_отзывов",
+        color="Средняя_цена",
+        color_continuous_scale="Blues",
+        title="Структура спроса (размер = отзывы, цвет = ср. цена)",
+        labels={"Всего_отзывов": "Отзывов", "Средняя_цена": "Ср. цена (₽)"},
+    )
+    fig.update_traces(texttemplate="%{label}<br>%{value:,} отзывов")
+    return fig
+
+
+def reviews_by_category_chart(df: pd.DataFrame):
+    """Распределение рейтингов по категориям (violin)."""
+    rated = df[df["rating"] > 0]
+    if rated.empty:
+        return go.Figure()
+    fig = px.violin(
+        rated, x="category", y="rating", color="source",
+        title="Распределение рейтингов по категориям",
+        labels={"category": "Категория", "rating": "Рейтинг", "source": "Магазин"},
+        color_discrete_map=STORE_COLORS,
+        box=True, points=False,
+    )
+    fig.update_layout(xaxis_title="Категория", yaxis_title="Рейтинг", legend_title="Магазин")
+    return fig
+
+
+def rating_histogram_chart(df: pd.DataFrame):
+    """Гистограмма рейтингов по магазинам."""
+    rated = df[df["rating"] > 0]
+    if rated.empty:
+        return go.Figure()
+    fig = px.histogram(
+        rated, x="rating", nbins=20, color="source",
+        title="Распределение рейтингов",
+        labels={"rating": "Рейтинг", "count": "Кол-во товаров", "source": "Магазин"},
+        color_discrete_map=STORE_COLORS,
+        barmode="overlay", opacity=0.75,
+    )
+    fig.update_layout(xaxis_title="Рейтинг", yaxis_title="Кол-во товаров", legend_title="Магазин")
+    return fig
+
+
+def price_range_distribution_chart(df: pd.DataFrame):
+    """Распределение товаров по ценовым диапазонам."""
+    d = df.copy()
+    p95 = d["price"].quantile(0.95)
+    upper = max(p95 * 1.01, 100001)
+    bins = [0, 5000, 15000, 30000, 60000, 100000, upper]
+    labels = ["до 5К", "5–15К", "15–30К", "30–60К", "60–100К", "100К+"]
+    d["price_range"] = pd.cut(d["price"], bins=bins, labels=labels)
+    data = (
+        d.groupby(["price_range", "source"], observed=True)
+        .size()
+        .reset_index(name="Товаров")
+    )
+    fig = px.bar(
+        data, x="price_range", y="Товаров", color="source",
+        title="Ассортимент по ценовым диапазонам",
+        labels={"price_range": "Диапазон цен", "Товаров": "Кол-во товаров", "source": "Магазин"},
+        color_discrete_map=STORE_COLORS,
+        barmode="group",
+    )
+    fig.update_layout(xaxis_title="Ценовой диапазон", yaxis_title="Кол-во товаров", legend_title="Магазин")
+    return fig
+
+
+def price_change_bar_chart(change_df: pd.DataFrame):
+    """Снижения vs Повышения цен по магазинам."""
+    if change_df.empty:
+        return go.Figure()
+    melted = change_df.melt(
+        id_vars="Магазин",
+        value_vars=["Снижений", "Повышений"],
+        var_name="Тип", value_name="Кол-во",
+    )
+    fig = px.bar(
+        melted, x="Магазин", y="Кол-во", color="Тип",
+        title="Изменения цен по магазинам",
+        labels={"Кол-во": "Кол-во изменений"},
+        barmode="group",
+        color_discrete_map={"Снижений": "#059669", "Повышений": "#DC2626"},
+        text="Кол-во",
+    )
+    fig.update_traces(textposition="outside")
+    return fig
+
+
+def brand_price_chart(df: pd.DataFrame, top_n: int = 15):
+    """Средняя цена и рейтинг по топ-брендам (bubble chart)."""
+    if df.empty or "brand" not in df.columns:
+        return go.Figure()
+    brand_data = (
+        df[df["brand"].notna() & (df["brand"] != "")]
+        .groupby("brand")
+        .agg(
+            Средняя_цена=("price", "mean"),
+            Средний_рейтинг=("rating", "mean"),
+            Товаров=("id", "count"),
+            Отзывов=("reviews_count", "sum"),
+        )
+        .nlargest(top_n, "Товаров")
+        .reset_index()
+    )
+    fig = px.scatter(
+        brand_data, x="Средняя_цена", y="Средний_рейтинг",
+        size="Товаров", text="brand",
+        title=f"Топ-{top_n} брендов: цена vs рейтинг",
+        labels={"Средняя_цена": "Средняя цена (₽)", "Средний_рейтинг": "Рейтинг", "Товаров": "Кол-во товаров"},
+        color="Товаров", color_continuous_scale="Blues",
+        hover_data=["Отзывов"],
+    )
+    fig.update_traces(textposition="top center")
+    return fig
+
+
+def category_dynamics_chart(history_df: pd.DataFrame):
+    """Динамика цен по категориям и магазинам (facet)."""
+    if history_df.empty or "collected_at" not in history_df.columns:
+        return go.Figure()
+    data = history_df.copy()
+    data["collected_at"] = pd.to_datetime(data["collected_at"])
+    data = data.groupby(["collected_at", "source", "category"])["price"].mean().reset_index()
+    fig = px.line(
+        data, x="collected_at", y="price", color="source",
+        facet_col="category", facet_col_wrap=3,
+        title="Динамика цен по категориям",
+        labels={"collected_at": "Дата", "price": "Средняя цена (₽)", "source": "Магазин"},
+        color_discrete_map=STORE_COLORS,
+        markers=True,
+    )
+    fig.update_layout(height=500)
+    return fig
+
+
 # ── ML ─────────────────────────────────────────────────────────────────────
 
 def cluster_scatter(df: pd.DataFrame):

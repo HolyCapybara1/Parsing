@@ -160,6 +160,95 @@ def cross_category_summary(df: pd.DataFrame) -> pd.DataFrame:
     )
 
 
+def market_position(df: pd.DataFrame) -> pd.DataFrame:
+    """Позиция магазина на рынке: доля, средняя цена, рейтинг, отзывы."""
+    if df.empty:
+        return pd.DataFrame()
+    total = len(df)
+    result = (
+        df.groupby("source")
+        .agg(
+            Товаров=("id", "count"),
+            Средняя_цена=("price", "mean"),
+            Средний_рейтинг=("rating", "mean"),
+            Отзывов=("reviews_count", "sum"),
+        )
+        .round(2)
+        .reset_index()
+        .rename(columns={"source": "Магазин"})
+    )
+    result["Доля_рынка_%"] = (result["Товаров"] / total * 100).round(1)
+    return result.sort_values("Товаров", ascending=False).reset_index(drop=True)
+
+
+def demand_structure(df: pd.DataFrame) -> pd.DataFrame:
+    """Структура спроса по категориям: кол-во товаров, отзывов, рейтинг."""
+    if df.empty:
+        return pd.DataFrame()
+    return (
+        df.groupby("category")
+        .agg(
+            Товаров=("id", "count"),
+            Средняя_цена=("price", "mean"),
+            Средний_рейтинг=("rating", "mean"),
+            Всего_отзывов=("reviews_count", "sum"),
+        )
+        .round(2)
+        .reset_index()
+        .rename(columns={"category": "Категория"})
+        .sort_values("Всего_отзывов", ascending=False)
+        .reset_index(drop=True)
+    )
+
+
+def reviews_analysis(df: pd.DataFrame) -> dict:
+    """Сводные показатели по отзывам и рейтингам."""
+    if df.empty or "rating" not in df.columns:
+        return {}
+    rated = df[df["rating"] > 0]
+    result = {
+        "avg_rating": round(rated["rating"].mean(), 2) if not rated.empty else 0,
+        "total_reviews": int(df["reviews_count"].sum()),
+        "avg_reviews": round(df["reviews_count"].mean(), 1),
+    }
+    if "brand" in df.columns and not df.empty:
+        brand_reviews = df.groupby("brand")["reviews_count"].sum()
+        if not brand_reviews.empty:
+            result["most_reviewed_brand"] = brand_reviews.idxmax()
+        if not rated.empty:
+            brand_rating = rated.groupby("brand")["rating"].mean()
+            if not brand_rating.empty:
+                result["top_rated_brand"] = brand_rating.idxmax()
+    return result
+
+
+def price_change_stats(history_df: pd.DataFrame) -> pd.DataFrame:
+    """Статистика изменений цен между сессиями сбора."""
+    if history_df.empty or "collected_at" not in history_df.columns:
+        return pd.DataFrame()
+    h = history_df.copy()
+    h["collected_at"] = pd.to_datetime(h["collected_at"])
+    h = h.sort_values(["name", "source", "collected_at"])
+    h["price_prev"] = h.groupby(["name", "source"])["price"].shift(1)
+    h["price_change"] = h["price"] - h["price_prev"]
+    h["price_change_pct"] = (h["price_change"] / h["price_prev"] * 100).round(2)
+    changed = h[h["price_change"].abs() > 0].dropna(subset=["price_change"])
+    if changed.empty:
+        return pd.DataFrame()
+    return (
+        changed.groupby("source")
+        .agg(
+            Изменений=("price_change", "count"),
+            Среднее_изменение_пct=("price_change_pct", "mean"),
+            Снижений=("price_change", lambda x: (x < 0).sum()),
+            Повышений=("price_change", lambda x: (x > 0).sum()),
+        )
+        .round(2)
+        .reset_index()
+        .rename(columns={"source": "Магазин"})
+    )
+
+
 def price_comparison_by_source(df: pd.DataFrame) -> pd.DataFrame:
     if df.empty:
         return pd.DataFrame()
