@@ -3,9 +3,10 @@ import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
 import streamlit as st
-from dashboard.components.charts import cluster_scatter
+import plotly.express as px
+from dashboard.components.charts import STORE_COLORS
 from db.repository import get_all_products, init_db
-from ml.clustering import train_kmeans, predict_segment
+from ml.clustering import train_kmeans, predict_segment, predict_segment_by_category
 from ml.classifier import train_classifier
 
 st.set_page_config(page_title="Ценовые сегменты — ЦенМонитор", layout="wide")
@@ -22,6 +23,8 @@ df = get_all_products()
 if df.empty:
     st.warning("Нет данных. Запустите парсинг на странице **Парсинг**.")
     st.stop()
+
+all_categories = sorted(df["category"].unique().tolist())
 
 st.divider()
 
@@ -67,18 +70,44 @@ st.divider()
 if "segment" in df.columns and df["segment"].notna().any():
     seg_df = df.dropna(subset=["segment"])
 
-    st.subheader("Карта сегментов: Цена vs Рейтинг")
-    st.plotly_chart(cluster_scatter(seg_df), use_container_width=True)
-    st.caption(
-        "Каждая точка — товар. "
-        "Цвет = сегмент (Бюджетный / Средний / Премиум), форма = магазин."
+    # Фильтр по категории для карты и таблицы
+    filter_cat = st.selectbox(
+        "Показать категорию",
+        ["Все категории"] + all_categories,
+        key="seg_cat_filter",
     )
+    view_df = seg_df if filter_cat == "Все категории" else seg_df[seg_df["category"] == filter_cat]
+
+    st.subheader("Карта сегментов: Цена vs Рейтинг")
+    if not view_df.empty:
+        fig = px.scatter(
+            view_df, x="price", y="rating",
+            color="segment", symbol="source",
+            title=f"Сегментация{' — ' + filter_cat if filter_cat != 'Все категории' else ''}",
+            labels={
+                "price": "Цена (₽)", "rating": "Рейтинг",
+                "segment": "Сегмент", "source": "Магазин",
+            },
+            color_discrete_map={
+                "Бюджетный": "#059669",
+                "Средний": "#D97706",
+                "Премиум": "#2563EB",
+            },
+            hover_data=["name", "brand", "category"],
+        )
+        st.plotly_chart(fig, use_container_width=True)
+        st.caption(
+            "Каждая точка — товар. "
+            "Цвет = сегмент (Бюджетный / Средний / Премиум), форма = магазин."
+        )
+    else:
+        st.info("По выбранной категории нет товаров с сегментами.")
 
     st.divider()
 
     st.subheader("Сводка по сегментам")
     summary = (
-        seg_df.groupby("segment")
+        view_df.groupby("segment")
         .agg(
             Товаров=("id", "count"),
             Средняя_цена=("price", "mean"),
@@ -90,26 +119,27 @@ if "segment" in df.columns and df["segment"].notna().any():
         .round(2)
         .reset_index()
     )
-    st.dataframe(
-        summary.style.format({
-            "Средняя_цена": "{:,.0f} ₽",
-            "Мин_цена": "{:,.0f} ₽",
-            "Макс_цена": "{:,.0f} ₽",
-            "Средний_рейтинг": "{:.2f}",
-            "Всего_отзывов": "{:,.0f}",
-        }),
-        use_container_width=True,
-        hide_index=True,
-        column_config={
-            "segment": "Сегмент",
-            "Товаров": "Товаров",
-            "Средняя_цена": "Ср. цена",
-            "Мин_цена": "Мин. цена",
-            "Макс_цена": "Макс. цена",
-            "Средний_рейтинг": "Рейтинг",
-            "Всего_отзывов": "Отзывов",
-        },
-    )
+    if not summary.empty:
+        st.dataframe(
+            summary.style.format({
+                "Средняя_цена": "{:,.0f} ₽",
+                "Мин_цена": "{:,.0f} ₽",
+                "Макс_цена": "{:,.0f} ₽",
+                "Средний_рейтинг": "{:.2f}",
+                "Всего_отзывов": "{:,.0f}",
+            }),
+            use_container_width=True,
+            hide_index=True,
+            column_config={
+                "segment": "Сегмент",
+                "Товаров": "Товаров",
+                "Средняя_цена": "Ср. цена",
+                "Мин_цена": "Мин. цена",
+                "Макс_цена": "Макс. цена",
+                "Средний_рейтинг": "Рейтинг",
+                "Всего_отзывов": "Отзывов",
+            },
+        )
 else:
     st.info(
         "Сегменты пока не рассчитаны. "
@@ -118,25 +148,87 @@ else:
 
 st.divider()
 
+# ── Пороги по категориям ───────────────────────────────────────────────────
+st.subheader("Ценовые пороги по категориям")
+st.caption("Границы сегментов рассчитаны на основе реальных данных для каждой категории отдельно.")
+
+thresholds = []
+for cat in all_categories:
+    cat_df = df[df["category"] == cat]
+    if len(cat_df) >= 3:
+        p33 = cat_df["price"].quantile(0.33)
+        p66 = cat_df["price"].quantile(0.66)
+        thresholds.append({
+            "Категория": cat,
+            "Бюджетный (до)": f"{p33:,.0f} ₽",
+            "Средний (до)": f"{p66:,.0f} ₽",
+            "Премиум (от)": f"{p66:,.0f} ₽",
+            "Товаров": len(cat_df),
+        })
+
+if thresholds:
+    import pandas as pd
+    st.dataframe(pd.DataFrame(thresholds), use_container_width=True, hide_index=True)
+
+st.divider()
+
 # ── Определить сегмент для нового товара ──────────────────────────────────
 st.subheader("Определить сегмент нового товара")
-st.caption("Введите параметры товара — система скажет, к какому сегменту он относится.")
+st.caption(
+    "Введите параметры товара — система скажет, к какому сегменту он относится "
+    "**с учётом выбранной категории**."
+)
 
 with st.form("classify_form"):
-    col1, col2, col3 = st.columns(3)
+    col0, col1, col2, col3 = st.columns([2, 2, 1, 1])
+    category = col0.selectbox("Категория товара", all_categories)
     price = col1.number_input("Цена (₽)", min_value=0, value=15000, step=500)
-    rating = col2.number_input("Рейтинг (от 0 до 5)", min_value=0.0, max_value=5.0, value=4.5, step=0.1)
-    reviews = col3.number_input("Кол-во отзывов", min_value=0, value=200, step=10)
+    rating = col2.number_input("Рейтинг (0–5)", min_value=0.0, max_value=5.0, value=4.5, step=0.1)
+    reviews = col3.number_input("Отзывов", min_value=0, value=200, step=10)
     submitted = st.form_submit_button("Определить сегмент", type="primary", use_container_width=True)
 
 if submitted:
-    segment = predict_segment(float(price), float(rating), int(reviews))
-    colors = {"Бюджетный": "green", "Средний": "orange", "Премиум": "red"}
-    color = colors.get(segment, "blue")
-    st.success(f"Товар относится к сегменту: **:{color}[{segment}]**")
+    result = predict_segment_by_category(float(price), float(rating), int(reviews), category, df)
+    segment = result["segment"]
+    budget_max = result["budget_max"]
+    mid_max = result["mid_max"]
+    cat_count = result["category_count"]
+
+    seg_colors = {"Бюджетный": "green", "Средний": "orange", "Премиум": "blue"}
+    color = seg_colors.get(segment, "blue")
+
+    st.success(f"Категория **{category}** — сегмент: **:{color}[{segment}]**")
+
+    # Пороги для этой категории
+    c1, c2, c3 = st.columns(3)
+    c1.metric(
+        "Бюджетный",
+        f"до {budget_max:,.0f} ₽",
+        delta="✓" if segment == "Бюджетный" else None,
+        delta_color="normal",
+    )
+    c2.metric(
+        "Средний",
+        f"{budget_max:,.0f} – {mid_max:,.0f} ₽",
+        delta="✓" if segment == "Средний" else None,
+        delta_color="normal",
+    )
+    c3.metric(
+        "Премиум",
+        f"от {mid_max:,.0f} ₽",
+        delta="✓" if segment == "Премиум" else None,
+        delta_color="normal",
+    )
+
     descriptions = {
-        "Бюджетный": "Низкая цена, ориентация на массовый спрос.",
-        "Средний": "Оптимальное соотношение цены и качества.",
-        "Премиум": "Высокая цена, акцент на качестве и статусе.",
+        "Бюджетный": "Низкая цена для данной категории, ориентация на массовый спрос.",
+        "Средний": "Оптимальное соотношение цены и качества в данной категории.",
+        "Премиум": "Высокая цена для данной категории, акцент на качестве и статусе.",
     }
-    st.info(descriptions.get(segment, ""))
+    if cat_count > 0:
+        st.info(
+            f"{descriptions.get(segment, '')} "
+            f"Пороги рассчитаны по {cat_count} товарам категории «{category}»."
+        )
+    else:
+        st.info(f"{descriptions.get(segment, '')} (использованы глобальные пороги — мало данных по категории)")
