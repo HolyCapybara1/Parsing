@@ -55,13 +55,6 @@ selected_sources = st.sidebar.multiselect(
     default=all_sources,
 )
 
-st.sidebar.divider()
-comparison_mode = st.sidebar.radio(
-    "Режим сравнения",
-    ["По магазинам", "По категориям", "По времени"],
-    index=0,
-)
-
 # Применяем фильтры
 df = df_all.copy()
 if selected_categories:
@@ -367,8 +360,13 @@ with tab_reviews:
 # Вкладка 5: СРАВНЕНИЕ
 # ══════════════════════════════════════════════════════════════════════════
 with tab_compare:
-    st.subheader(f"Режим: {comparison_mode}")
-    st.caption("Режим можно сменить в боковой панели слева.")
+    comparison_mode = st.radio(
+        "Режим сравнения",
+        ["По магазинам", "По категориям", "По времени"],
+        horizontal=True,
+        label_visibility="collapsed",
+    )
+    st.divider()
 
     # ── По магазинам ──────────────────────────────────────────────────────
     if comparison_mode == "По магазинам":
