@@ -44,7 +44,7 @@ with col2:
         df, x="category", y="price", color="source",
         title="Разброс цен по категориям",
         labels={"category": "Категория", "price": "Цена (₽)", "source": "Магазин"},
-        color_discrete_map={"DNS": "#2563EB", "Ситилинк": "#DC2626",
+        color_discrete_map={"DNS": "#2563EB", "Ситилинк": "#7C3AED",
                              "Regard": "#059669", "NIX": "#D97706"},
         points=False,
     )

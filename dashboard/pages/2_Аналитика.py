@@ -16,6 +16,7 @@ from analytics.analytics import (
 )
 from dashboard.components.charts import (
     STORE_COLORS,
+    price_histogram, avg_price_by_brand, price_by_source,
     mean_median_by_category, price_index_chart, price_index_by_category_chart,
     price_dynamics_chart, anomaly_boxplot, sentiment_chart,
     market_share_chart, demand_structure_chart, reviews_by_category_chart,
@@ -23,6 +24,7 @@ from dashboard.components.charts import (
     price_change_bar_chart, brand_price_chart, category_dynamics_chart,
     min_max_by_category,
 )
+from dashboard.components.stat_cards import render_stat_cards
 from dashboard.components.pdf_export import export_to_pdf
 
 st.set_page_config(page_title="Аналитика — ЦенМонитор", layout="wide")
@@ -99,14 +101,19 @@ tab_market, tab_prices, tab_dynamics, tab_reviews, tab_compare = st.tabs([
 # Вкладка 1: РЫНОК
 # ══════════════════════════════════════════════════════════════════════════
 with tab_market:
-    st.subheader("Рыночные показатели")
-    stats = price_stats_market(df)
-    c1, c2, c3, c4, c5 = st.columns(5)
-    c1.metric("Всего товаров", f"{stats.get('total', 0):,}")
-    c2.metric("Средняя цена", f"{stats.get('mean', 0):,.0f} ₽")
-    c3.metric("Медианная цена", f"{stats.get('median', 0):,.0f} ₽")
-    c4.metric("Мин. цена", f"{stats.get('min', 0):,.0f} ₽")
-    c5.metric("Макс. цена", f"{stats.get('max', 0):,.0f} ₽")
+    # ── Ключевые метрики ──
+    render_stat_cards(df)
+
+    st.divider()
+
+    # ── Обзорные графики ──
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.plotly_chart(price_histogram(df), use_container_width=True)
+    with col2:
+        st.plotly_chart(avg_price_by_brand(df), use_container_width=True)
+    with col3:
+        st.plotly_chart(price_by_source(df), use_container_width=True)
 
     st.divider()
 

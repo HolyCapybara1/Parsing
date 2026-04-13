@@ -3,9 +3,6 @@ import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
 import streamlit as st
-from dashboard.components.filters import render_filters
-from dashboard.components.stat_cards import render_stat_cards
-from dashboard.components.charts import price_histogram, avg_price_by_brand, price_by_source
 from db.repository import get_all_products, init_db
 from scraper.runner import ALL_CATEGORIES, ALL_SOURCES
 
@@ -141,7 +138,7 @@ with st.expander("Настройки сбора данных", expanded=True):
                 )
             st.rerun()
 
-# ── Данные ─────────────────────────────────────────────────────────────────
+# ── Статус данных ─────────────────────────────────────────────────────────
 st.divider()
 df = get_all_products()
 
@@ -155,23 +152,10 @@ if df.empty:
     playwright install chromium
     ```
     """)
-    st.stop()
-
-st.caption(f"Последнее обновление: {df['collected_at'].max()}")
-
-filtered_df = render_filters(df)
-
-if filtered_df.empty:
-    st.warning("По выбранным фильтрам товары не найдены.")
-    st.stop()
-
-render_stat_cards(filtered_df)
-st.divider()
-
-col1, col2, col3 = st.columns(3)
-with col1:
-    st.plotly_chart(price_histogram(filtered_df), use_container_width=True)
-with col2:
-    st.plotly_chart(avg_price_by_brand(filtered_df), use_container_width=True)
-with col3:
-    st.plotly_chart(price_by_source(filtered_df), use_container_width=True)
+else:
+    col1, col2, col3, col4 = st.columns(4)
+    col1.metric("Товаров в базе", f"{len(df):,}")
+    col2.metric("Магазинов", f"{df['source'].nunique()}")
+    col3.metric("Категорий", f"{df['category'].nunique()}")
+    col4.metric("Последнее обновление", str(df["collected_at"].max())[:16])
+    st.info("Перейдите в раздел **Аналитика** для просмотра графиков и статистики.")
