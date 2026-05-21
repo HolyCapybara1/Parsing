@@ -27,7 +27,11 @@ if search:
 st.caption(f"Найдено товаров: {len(df)}")
 
 # Интерактивная таблица
-display_cols = ["name", "brand", "category", "source", "price", "rating", "reviews_count", "segment"]
+import pandas as pd
+if "collected_at" in df.columns:
+    df["collected_at"] = pd.to_datetime(df["collected_at"]).dt.date
+
+display_cols = ["name", "brand", "category", "source", "price", "rating", "reviews_count", "collected_at", "segment"]
 available_cols = [c for c in display_cols if c in df.columns]
 
 st.dataframe(
@@ -41,6 +45,7 @@ st.dataframe(
         "price": st.column_config.NumberColumn("Цена (₽)", format="%d ₽"),
         "rating": st.column_config.NumberColumn("Рейтинг", format="★%.1f"),
         "reviews_count": st.column_config.NumberColumn("Отзывы"),
+        "collected_at": st.column_config.DateColumn("Дата сбора", format="DD.MM.YYYY"),
         "segment": st.column_config.TextColumn("Сегмент"),
     },
     hide_index=True,
