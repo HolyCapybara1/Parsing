@@ -38,10 +38,14 @@ def _demo_price(base_price: float, name: str, target_date: date) -> float:
 
 def _run_demo(categories: list[str], sources: list[str]) -> dict:
     """Загрузить данные из demo_catalog для текущей даты."""
+    import time
     from .demo_catalog import PRODUCTS as CATALOG
 
     today = date.today()
     init_db()
+
+    # Реалистичная задержка: 1–3 минуты
+    time.sleep(random.uniform(60, 180))
 
     with SessionLocal() as session:
         collection = Collection(
