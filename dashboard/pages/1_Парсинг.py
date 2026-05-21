@@ -30,7 +30,7 @@ def _src_word(n):
 
 # ── Инициализация session state ────────────────────────────────────────────
 if "selected_categories" not in st.session_state:
-    st.session_state["selected_categories"] = ["Оперативная память", "Видеокарты", "Смартфоны"]
+    st.session_state["selected_categories"] = list(ALL_CATEGORIES)
 if "show_cat_picker" not in st.session_state:
     st.session_state["show_cat_picker"] = False
 
