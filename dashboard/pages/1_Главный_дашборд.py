@@ -47,7 +47,7 @@ with st.expander("Настройки сбора данных", expanded=True):
         )
 
         if st.button("▶ Собрать данные", type="primary", use_container_width=True):
-            with st.spinner("Идёт парсинг... Не закрывайте страницу."):
+            with st.spinner("Загрузка данных... Не закрывайте страницу."):
                 from scraper.runner import run_all
                 from logger.logger import setup_all_loggers
                 setup_all_loggers()
