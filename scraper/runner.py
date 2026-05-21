@@ -1,14 +1,14 @@
-import os
-import random
-import hashlib
-import logging
-from datetime import datetime, date, timedelta
-
+from .dns_parser import DnsParser
+from .citilink_parser import CitilinkParser
+from .regard_parser import RegardParser
 from db.repository import save_products, SessionLocal, init_db
 from db.models import Collection
+from datetime import datetime
+import logging
 
 logger = logging.getLogger("runner")
 
+# Все доступные категории
 ALL_CATEGORIES = [
     "Оперативная память",
     "Видеокарты",
@@ -19,85 +19,8 @@ ALL_CATEGORIES = [
     "Наушники",
 ]
 
+# Все доступные магазины
 ALL_SOURCES = ["DNS", "Ситилинк", "Regard"]
-
-# Диапазон дат для демо-данных
-_DEMO_START = date(2026, 4, 1)
-_DEMO_END   = date(2026, 7, 1)
-
-
-def _demo_price(base_price: float, name: str, target_date: date) -> float:
-    """
-    Детерминированная цена для товара на заданную дату.
-    Использует случайное блуждание от _DEMO_START с seed-ом от имени товара,
-    поэтому одна и та же дата всегда возвращает одну и ту же цену.
-    """
-    cap = min(target_date, _DEMO_END)
-    days = (cap - _DEMO_START).days
-    if days < 0:
-        days = 0
-
-    name_hash = int(hashlib.sha1(name.encode()).hexdigest()[:8], 16)
-    rng = random.Random(name_hash)
-
-    price = base_price
-    for _ in range(days):
-        price *= rng.uniform(0.991, 1.009)
-
-    return max(round(price / 10) * 10, base_price * 0.75)
-
-
-def _run_demo(categories: list[str], sources: list[str]) -> dict:
-    """Загрузить данные из demo_catalog для текущей даты."""
-    from .demo_catalog import PRODUCTS as CATALOG
-
-    today = date.today()
-    init_db()
-
-    with SessionLocal() as session:
-        collection = Collection(
-            started_at=datetime.utcnow(),
-            status="running",
-        )
-        session.add(collection)
-        session.commit()
-        cid = collection.id
-
-    total = 0
-    active_sources = 0
-
-    for source_name, catalog_items in CATALOG.items():
-        if source_name not in sources:
-            continue
-        active_sources += 1
-
-        to_save = []
-        for item in catalog_items:
-            if item["category"] not in categories:
-                continue
-            product = dict(item)
-            product["price"] = _demo_price(item["price"], item["name"], today)
-            to_save.append(product)
-
-        if to_save:
-            save_products(to_save, source_name, cid)
-            total += len(to_save)
-            logger.info(f"[DEMO] {source_name}: загружено {len(to_save)} товаров за {today}")
-
-    with SessionLocal() as session:
-        col = session.get(Collection, cid)
-        col.finished_at = datetime.utcnow()
-        col.status = "success"
-        col.total_records = total
-        session.commit()
-
-    logger.info(f"[DEMO] Итого: {total} товаров из {active_sources} магазинов")
-    return {
-        "total": total,
-        "sources": active_sources,
-        "categories": len(categories),
-        "errors": 0,
-    }
 
 
 def run_all(
@@ -105,26 +28,18 @@ def run_all(
     sources: list[str] = None,
 ) -> dict:
     """
-    Запустить сбор данных.
-    Если присутствует scraper/demo_catalog.py — используется демо-режим
-    (данные из каталога с ценами, характерными для текущей даты).
-    Иначе — реальный парсинг сайтов.
+    Запустить парсинг.
+
+    :param categories: список категорий для сбора (None = все)
+    :param sources:    список магазинов для сбора (None = все)
+    :return: словарь с итогами
     """
+    init_db()
+
     if categories is None:
         categories = ALL_CATEGORIES
     if sources is None:
         sources = ALL_SOURCES
-
-    demo_catalog = os.path.join(os.path.dirname(__file__), "demo_catalog.py")
-    if os.path.exists(demo_catalog):
-        return _run_demo(categories, sources)
-
-    # ── Реальный парсинг ──────────────────────────────────────────────────
-    from .dns_parser import DnsParser
-    from .citilink_parser import CitilinkParser
-    from .regard_parser import RegardParser
-
-    init_db()
 
     with SessionLocal() as session:
         collection = Collection(started_at=datetime.utcnow(), status="running")
@@ -179,5 +94,6 @@ if __name__ == "__main__":
     from logger.logger import setup_all_loggers
     setup_all_loggers()
 
+    # Пример: только смартфоны с DNS
     result = run_all(categories=["Смартфоны"], sources=["DNS"])
     print(f"Готово: {result}")
