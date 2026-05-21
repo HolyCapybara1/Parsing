@@ -14,7 +14,7 @@ class Source(Base):
     name = Column(String, nullable=False)   # DNS, Ситилинк, Regard
     base_url = Column(String, nullable=False)
     is_active = Column(Boolean, default=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=datetime.now)
 
     products = relationship("Product", back_populates="source")
 
@@ -28,7 +28,7 @@ class Product(Base):
     category = Column(String, nullable=False)
     url = Column(String)
     source_id = Column(Integer, ForeignKey("sources.id"))
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=datetime.now)
 
     source = relationship("Source", back_populates="products")
     prices = relationship("Price", back_populates="product")
@@ -43,7 +43,7 @@ class Price(Base):
     price = Column(Float, nullable=False)
     rating = Column(Float)
     reviews_count = Column(Integer)
-    collected_at = Column(DateTime, default=datetime.utcnow)
+    collected_at = Column(DateTime, default=datetime.now)
     collection_id = Column(Integer, ForeignKey("collections.id"))
 
     product = relationship("Product", back_populates="prices")
@@ -53,7 +53,7 @@ class Collection(Base):
     __tablename__ = "collections"
 
     id = Column(Integer, primary_key=True)
-    started_at = Column(DateTime, default=datetime.utcnow)
+    started_at = Column(DateTime, default=datetime.now)
     finished_at = Column(DateTime)
     status = Column(String)   # running | success | error
     total_records = Column(Integer, default=0)
@@ -67,6 +67,6 @@ class MLCluster(Base):
     segment = Column(String)  # Бюджетный | Средний | Премиум
     confidence = Column(Float)
     model_version = Column(String)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=datetime.now)
 
     product = relationship("Product", back_populates="cluster")

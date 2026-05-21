@@ -45,7 +45,7 @@ def _run_demo(categories: list[str], sources: list[str]) -> dict:
 
     with SessionLocal() as session:
         collection = Collection(
-            started_at=datetime.utcnow(),
+            started_at=datetime.now(),
             status="running",
         )
         session.add(collection)
@@ -75,7 +75,7 @@ def _run_demo(categories: list[str], sources: list[str]) -> dict:
 
     with SessionLocal() as session:
         col = session.get(Collection, cid)
-        col.finished_at = datetime.utcnow()
+        col.finished_at = datetime.now()
         col.status = "success"
         col.total_records = total
         session.commit()
@@ -115,7 +115,7 @@ def run_all(
     init_db()
 
     with SessionLocal() as session:
-        collection = Collection(started_at=datetime.utcnow(), status="running")
+        collection = Collection(started_at=datetime.now(), status="running")
         session.add(collection)
         session.commit()
         cid = collection.id
@@ -147,7 +147,7 @@ def run_all(
 
     with SessionLocal() as session:
         col = session.get(Collection, cid)
-        col.finished_at = datetime.utcnow()
+        col.finished_at = datetime.now()
         col.status = "success" if errors == 0 else "partial"
         col.total_records = total
         session.commit()
