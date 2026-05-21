@@ -1,14 +1,14 @@
 from .base import BaseParser
 
-# Реальные URL категорий Regard
+# URL категорий Regard (уточните остальные по аналогии с RAM)
 CATEGORIES = {
-    "Оперативная память": "/catalog/18/",
-    "Видеокарты": "/catalog/14/",
-    "Смартфоны": "/catalog/516/",
-    "Процессоры": "/catalog/4/",
-    "Ноутбуки": "/catalog/53/",
-    "SSD-накопители": "/catalog/1572/",
-    "Наушники": "/catalog/614/",
+    "Оперативная память": "/catalog/1010/operativnaya-pamyat/",
+    "Видеокарты": "/catalog/1070/videokarty/",
+    "Смартфоны": "/catalog/1130/smartfony/",
+    "Процессоры": "/catalog/1020/processory/",
+    "Ноутбуки": "/catalog/1040/noutbuki/",
+    "SSD-накопители": "/catalog/1572/ssd-nakopiteli/",
+    "Наушники": "/catalog/614/naushniki/",
 }
 
 
@@ -24,81 +24,83 @@ class RegardParser(BaseParser):
 
         products = []
         for page_num in range(1, 6):
-            url = f"{self.base_url}{path}?page={page_num}"
+            url = f"{self.base_url}{path}?sort=price&page={page_num}"
             self.logger.info(f"Regard {category}: страница {page_num}")
 
-            soup = self.get_page(url, wait_selector=".b-product-card, .product-card")
+            soup = self.get_page(url, wait_selector="[class*='ListingRenderer_listingCard']")
             if not soup:
                 break
 
-            items = (
-                soup.select(".b-product-card") or
-                soup.select(".product-card") or
-                soup.select("[class*='product-item']")
-            )
-            if not items:
+            cards = soup.select("[class*='ListingRenderer_listingCard']")
+            if not cards:
                 self.logger.info(f"Regard {category}: стр.{page_num} пустая, стоп")
                 break
 
-            for item in items:
+            for card in cards:
                 try:
                     # Название
                     name_tag = (
-                        item.select_one(".b-product-card__name a") or
-                        item.select_one(".b-product-card__name") or
-                        item.select_one(".product-card__name a") or
-                        item.select_one(".product-card__name") or
-                        item.select_one("a[class*='name']")
+                        card.select_one("[class*='CardText_title']") or
+                        card.select_one("a[class*='CardText_link']")
                     )
                     if not name_tag:
                         continue
                     name = name_tag.get_text(strip=True)
-                    if not name:
+                    if not name or len(name) < 5:
                         continue
 
                     # Ссылка
-                    link_tag = name_tag if name_tag.name == "a" else item.select_one("a[href]")
+                    link_tag = card.select_one("a[class*='CardText_link']")
                     href = link_tag.get("href", "") if link_tag else ""
                     item_url = self.base_url + href if href.startswith("/") else href
 
-                    # Цена
-                    price_tag = (
-                        item.select_one(".b-product-card__buy-price") or
-                        item.select_one(".product-card__price") or
-                        item.select_one("[class*='price']")
+                    # Цена — берём из основного блока цены (не SimilarGood)
+                    price_tag = card.select_one(
+                        "[class*='CardPrice_price'], span[class*='Price_price']"
                     )
+                    # Избегаем цен из блока "похожие товары"
+                    if not price_tag:
+                        price_tag = card.select_one("[class*='Card_price']")
                     price = self.clean_price(price_tag.get_text() if price_tag else "")
                     if price <= 0:
                         continue
 
-                    # Рейтинг
-                    rating_tag = item.select_one("[class*='rating']")
-                    rating_val = 0.0
-                    if rating_tag:
-                        # Regard показывает рейтинг звёздами — ищем числовое значение
-                        style = rating_tag.get("style", "")
-                        if "width" in style:
-                            # width: 80% → 4.0 из 5
-                            try:
-                                pct = float("".join(c for c in style if c.isdigit() or c == "."))
-                                rating_val = round(pct / 20, 1)
-                            except Exception:
-                                pass
-                        else:
-                            rating_val = self.clean_rating(rating_tag.get_text())
+                    # Рейтинг — считаем звёзды
+                    full = len(card.select("[class*='ReviewStars_full']"))
+                    half = len(card.select("[class*='ReviewStars_half']"))
+                    rating = round(full + 0.5 * half, 1)
 
-                    # Отзывы
-                    reviews_tag = item.select_one("[class*='review']") or item.select_one("[class*='comment']")
+                    # Количество отзывов
+                    reviews_tag = card.select_one(
+                        "p[class*='ReviewStars_text'], a[class*='ReviewStars_link']"
+                    )
                     reviews = self.clean_reviews(reviews_tag.get_text() if reviews_tag else "")
 
-                    brand = name.split()[0] if name else ""
+                    # Бренд — ищем известные бренды в названии
+                    BRANDS = [
+                        "Kingston", "Samsung", "Crucial", "Corsair", "HyperX",
+                        "G.Skill", "Patriot", "ADATA", "Team", "Hynix", "Micron",
+                        "NVIDIA", "AMD", "Palit", "Gigabyte", "ASUS", "MSI", "Sapphire",
+                        "PowerColor", "XFX", "Zotac", "Apple", "Xiaomi", "Realme",
+                        "Intel", "Lenovo", "HP", "Dell", "Acer", "Huawei", "Honor",
+                        "Western Digital", "Seagate", "Transcend", "Silicon Power",
+                        "Sennheiser", "Sony", "JBL", "Jabra", "HyperX",
+                    ]
+                    brand = ""
+                    name_lower = name.lower()
+                    for b in BRANDS:
+                        if b.lower() in name_lower:
+                            brand = b
+                            break
+                    if not brand:
+                        brand = name.split()[0] if name else ""
 
                     products.append({
                         "name": name,
                         "brand": brand,
                         "category": category,
                         "price": price,
-                        "rating": rating_val,
+                        "rating": rating,
                         "reviews_count": reviews,
                         "url": item_url,
                         "source": "Regard",
@@ -106,9 +108,14 @@ class RegardParser(BaseParser):
                 except Exception as e:
                     self.logger.error(f"Regard: ошибка обработки товара: {e}")
 
-            self.logger.info(f"Regard {category}: стр.{page_num} — {len(items)} карточек")
+            self.logger.info(f"Regard {category}: стр.{page_num} — {len(products)} товаров всего")
 
-            next_btn = soup.select_one("a[rel='next']") or soup.select_one(".pagination .next")
+            # Проверяем пагинацию
+            next_btn = (
+                soup.select_one("a[rel='next']") or
+                soup.select_one("[class*='pagination'] [class*='next']") or
+                soup.select_one("[class*='Pagination'] [class*='next']")
+            )
             if not next_btn:
                 break
 

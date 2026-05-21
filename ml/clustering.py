@@ -92,6 +92,53 @@ def predict_segment(price: float, rating: float, reviews: int) -> str:
     return SEGMENT_NAMES[label_map[label]]
 
 
+def predict_segment_by_category(
+    price: float,
+    rating: float,
+    reviews: int,
+    category: str,
+    df: pd.DataFrame,
+) -> dict:
+    """
+    Предсказать сегмент с учётом категории товара.
+
+    Использует перцентили цен в выбранной категории как пороги:
+    ≤ 33-й перцентиль → Бюджетный
+    33–66-й перцентиль → Средний
+    > 66-й перцентиль  → Премиум
+
+    Returns:
+        dict с ключами: segment, budget_max, mid_max, category_count
+    """
+    cat_df = df[df["category"] == category] if (not df.empty and category) else df
+
+    if len(cat_df) >= 6:
+        p33 = float(cat_df["price"].quantile(0.33))
+        p66 = float(cat_df["price"].quantile(0.66))
+        count = len(cat_df)
+    elif not df.empty:
+        # Если данных по категории мало — глобальные пороги
+        p33 = float(df["price"].quantile(0.33))
+        p66 = float(df["price"].quantile(0.66))
+        count = 0
+    else:
+        p33, p66, count = 10000.0, 50000.0, 0
+
+    if price <= p33:
+        segment = "Бюджетный"
+    elif price <= p66:
+        segment = "Средний"
+    else:
+        segment = "Премиум"
+
+    return {
+        "segment": segment,
+        "budget_max": round(p33, 0),
+        "mid_max": round(p66, 0),
+        "category_count": count,
+    }
+
+
 def load_kmeans():
     """Загрузить обученную модель."""
     if os.path.exists(MODEL_PATH):
