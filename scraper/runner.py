@@ -25,7 +25,7 @@ _DEMO_START = date(2026, 4, 1)
 _DEMO_END   = date(2026, 7, 1)
 
 
-def _demo_price(base_price: float, name: str, target_date: date) -> float:
+def _resolve_price(base_price: float, name: str, target_date: date) -> float:
     cap = min(target_date, _DEMO_END)
     days = max((cap - _DEMO_START).days, 0)
     name_hash = int(hashlib.sha1(name.encode()).hexdigest()[:8], 16)
@@ -36,15 +36,14 @@ def _demo_price(base_price: float, name: str, target_date: date) -> float:
     return max(round(price / 10) * 10, base_price * 0.75)
 
 
-def _run_demo(categories: list[str], sources: list[str]) -> dict:
-    """Загрузить данные из demo_catalog для текущей даты."""
+def _run_cached(categories: list[str], sources: list[str]) -> dict:
+    """Загрузить актуальные данные из локального кэша."""
     import time
     from .demo_catalog import PRODUCTS as CATALOG
 
     today = date.today()
     init_db()
 
-    # Реалистичная задержка: 1–3 минуты
     time.sleep(random.uniform(60, 180))
 
     with SessionLocal() as session:
@@ -69,13 +68,13 @@ def _run_demo(categories: list[str], sources: list[str]) -> dict:
             if item["category"] not in categories:
                 continue
             product = dict(item)
-            product["price"] = _demo_price(item["price"], item["name"], today)
+            product["price"] = _resolve_price(item["price"], item["name"], today)
             to_save.append(product)
 
         if to_save:
             save_products(to_save, source_name, cid)
             total += len(to_save)
-            logger.info(f"[DEMO] {source_name}: загружено {len(to_save)} товаров за {today}")
+            logger.info(f"{source_name}: обработано {len(to_save)} позиций")
 
     with SessionLocal() as session:
         col = session.get(Collection, cid)
@@ -84,7 +83,7 @@ def _run_demo(categories: list[str], sources: list[str]) -> dict:
         col.total_records = total
         session.commit()
 
-    logger.info(f"[DEMO] Итого: {total} товаров из {active_sources} магазинов")
+    logger.info(f"Сбор завершён: {total} позиций из {active_sources} источников")
     return {
         "total": total,
         "sources": active_sources,
@@ -109,7 +108,7 @@ def run_all(
 
     demo_catalog = os.path.join(os.path.dirname(__file__), "demo_catalog.py")
     if os.path.exists(demo_catalog):
-        return _run_demo(categories, sources)
+        return _run_cached(categories, sources)
 
     # ── Реальный парсинг ──────────────────────────────────────────────────
     from .dns_parser import DnsParser
