@@ -116,7 +116,7 @@ with st.expander("Настройки сбора данных", expanded=True):
         )
 
         if st.button("▶ Собрать данные", type="primary", use_container_width=True):
-            with st.spinner("Идёт парсинг... Не закрывайте страницу."):
+            with st.spinner("Идёт сбор данных... Не закрывайте страницу."):
                 from scraper.runner import run_all
                 from logger.logger import setup_all_loggers
                 setup_all_loggers()
@@ -124,19 +124,24 @@ with st.expander("Настройки сбора данных", expanded=True):
                     categories=selected_categories,
                     sources=selected_sources,
                 )
-            if result["total"] > 0:
-                st.success(
-                    f"Готово! Собрано **{result['total']}** товаров "
-                    f"из **{result['sources']}** магазинов по **{result['categories']}** категориям."
-                )
-            else:
-                st.error(
-                    "Товары не найдены. Возможные причины:\n"
-                    "- Сайты заблокировали запросы (попробуйте позже)\n"
-                    "- Playwright не установлен (см. инструкцию ниже)\n"
-                    "- Проблемы с интернетом"
-                )
+            st.session_state["last_result"] = result
             st.rerun()
+
+# Показываем результат после rerun
+if "last_result" in st.session_state:
+    r = st.session_state.pop("last_result")
+    if r["total"] > 0:
+        st.success(
+            f"✅ Готово! Собрано **{r['total']}** товаров "
+            f"из **{r['sources']}** магазинов по **{r['categories']}** категориям."
+        )
+    else:
+        st.error(
+            "❌ Товары не найдены. Возможные причины:\n"
+            "- Сайты заблокировали запросы\n"
+            "- Playwright не установлен\n"
+            "- Проблемы с интернетом"
+        )
 
 # ── Статус данных ─────────────────────────────────────────────────────────
 st.divider()
