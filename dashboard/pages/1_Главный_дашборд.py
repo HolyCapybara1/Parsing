@@ -20,10 +20,28 @@ with st.expander("Настройки сбора данных", expanded=True):
 
     with col_cat:
         st.subheader("Категории товаров")
-        selected_categories = []
-        for cat in ALL_CATEGORIES:
-            if st.checkbox(cat, value=cat in ["Оперативная память", "Видеокарты", "Смартфоны"], key=f"cat_{cat}"):
-                selected_categories.append(cat)
+
+        if "selected_categories" not in st.session_state:
+            st.session_state.selected_categories = ["Оперативная память", "Видеокарты", "Смартфоны"]
+
+        # Отображаем выбранные категории как теги с крестиком
+        tag_cols = st.columns(len(st.session_state.selected_categories) + 1) if st.session_state.selected_categories else st.columns(1)
+        for i, cat in enumerate(list(st.session_state.selected_categories)):
+            with tag_cols[i]:
+                if st.button(f"{cat} ✕", key=f"remove_{cat}", help=f"Убрать {cat}"):
+                    st.session_state.selected_categories.remove(cat)
+                    st.rerun()
+
+        # Кнопка добавить
+        available = [c for c in ALL_CATEGORIES if c not in st.session_state.selected_categories]
+        if available:
+            with st.popover("＋ Добавить категорию"):
+                for cat in available:
+                    if st.button(cat, key=f"add_{cat}", use_container_width=True):
+                        st.session_state.selected_categories.append(cat)
+                        st.rerun()
+
+        selected_categories = st.session_state.selected_categories
 
     with col_src:
         st.subheader("Магазины")
