@@ -110,9 +110,7 @@ with st.expander("Настройки сбора данных", expanded=True):
         n_pages = len(selected_categories) * len(selected_sources)
         st.info(
             f"Будет собрано: **{len(selected_categories)}** {_cat_word(len(selected_categories))} "
-            f"× **{len(selected_sources)}** {_src_word(len(selected_sources))} "
-            f"≈ {n_pages * 5} страниц. "
-            f"Примерное время: **{n_pages * 2}–{n_pages * 5} мин.**"
+            f"× **{len(selected_sources)}** {_src_word(len(selected_sources))}."
         )
 
         if st.button("▶ Собрать данные", type="primary", use_container_width=True):
